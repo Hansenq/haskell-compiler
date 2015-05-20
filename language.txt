@@ -1,0 +1,44 @@
+
+Let's make a very primitive and easy language.
+
+ExprArith = a | a opArith a | -a | (a)
+OpArith = + | - | * | /
+
+ExprBool = True | False | not a | a OpComb b | a OpBool b | (b)
+OpBool = == | > | <
+OpComb = and | or
+
+Statements:
+a = b
+if (exprBool) then st1 else st2 end
+(st)
+continue
+st1; st2
+while (exprBool) do st end # Use iteration for fib, not recursion.
+
+Functions (?) (not sure how to do this):
+func [arguments] do
+statements
+
+
+
+fib.hk:
+Can optimize, but this might be the best to implement.
+
+N = 10;
+counter = 0;
+temp = 0;
+prev = 1;
+prevPrev = 1;
+while counter < N do
+    if counter < 2 then
+        continue
+    else
+        temp = prev + prevPrev;
+        prevPrev = prev;
+        prev = temp
+
+PARSED AS:
+Stmts [Assign "N" (Number 10),Assign "counter" (Number 0),Assign "temp" (Number 0),Assign "prev" (Number 1),Assign "prevPrev" (Number 1),While (BinBool LessThan (Var "counter") (Var "N")) (If (BinBool LessThan (Var "counter") (Number 2)) Continue (Stmts [Assign "temp" (ArithComb Add (Var "prev") (Var "prevPrev")),Assign "prevPrev" (Var "prev"),Assign "prev" (Var "temp")]))]
+
+-- Unsure about how to do functions--no way to easily store and call upon again?
