@@ -1,0 +1,10 @@
+N = 10
+prev = 1
+if not prev == 1 then
+    N = 20
+else
+    N = 30
+
+while N < 50 do
+    N = N + 1
+end

@@ -1,6 +1,6 @@
---Language
+--Language Definition
 
-module ParseLang where
+module LangDefOrig where
 
 import System.IO
 import Control.Monad
@@ -11,24 +11,30 @@ import qualified Text.Parsec.Token as Token
 
 type Parser = Parsec String ()
 
-data ExprBool = BoolConst Bool
+data Value = IntValue Integer
+           | BoolValue Bool
+           | StringValue String
+           | FuncValue Stmt
+           deriving (Show)
+
+data ExprBool = ValBool Value
               | Not ExprBool
-              | BinBool OpBool ExprArith ExprArith
-              | BinComb OpComb ExprBool ExprBool
+              | BinBool OpArith ExprArith ExprArith
+              | BinComb OpBool ExprBool ExprBool
               deriving (Show)
 -- Can define ExprArith
 
-data OpBool = EqualTo
-            | GreaterThan
-            | LessThan
-            deriving (Show)
+-- data OpBool = EqualTo
+--             | GreaterThan
+--             | LessThan
+--             deriving (Show)
 
-data OpComb = And
+data OpBool = And
             | Or
             deriving (Show)
 
 data ExprArith = Var String
-               | Number Integer
+               | ValArith Value
                | Negate ExprArith
                | ArithComb OpArith ExprArith ExprArith
                deriving (Show)
@@ -37,13 +43,16 @@ data OpArith = Add
              | Sub
              | Mult
              | Div
+             | EqualTo
+             | GreaterThan
+             | LessThan
              deriving (Show)
 
-data Stmt = Stmts [Stmt] -- or Seq Stmt Stmt, makes more conceptual sense
+data Stmt = Seq Stmt Stmt -- or Seq Stmt Stmt, makes more conceptual sense
           | Assign String ExprArith
           | If ExprBool Stmt Stmt
           | While ExprBool Stmt
-          | Continue
+          | Skip
           deriving (Show)
 
 languageDef =
@@ -54,7 +63,7 @@ languageDef =
                                        , "else"
                                        , "while"
                                        , "do"
-                                       , "continue"
+                                       , "skip"
                                        , "true"
                                        , "false"
                                        , "not"
@@ -73,23 +82,36 @@ reserved = Token.reserved lexer
 reservedOp = Token.reservedOp lexer
 parens = Token.parens lexer
 integer = Token.integer lexer
+stringLiteral = Token.stringLiteral lexer
 semi = Token.semi lexer
 whiteSpace = Token.whiteSpace lexer
 
 parser :: Parser Stmt
 parser = whiteSpace >> statement
 
+-- Defining Statement Parsers
 statement :: Parser Stmt
-statement =   parens statement
-          <|> sequenceOfStmt
+statement =  parens statement
+          <|> seqStmt
 statement' :: Parser Stmt
 statement' =   ifStmt
            <|> whileStmt
            <|> assignStmt
-           <|> continueStmt
-sequenceOfStmt = do
+           <|> skipStmt
+chain :: [Stmt] -> Stmt
+chain (x:[]) = x
+chain s = foldr1 (\x acc -> Seq x acc) s
+-- chain (x:xs) = (Seq x (chain xs))
+seqStmt :: Parser Stmt
+seqStmt = do
     list <- (sepBy1 statement' whiteSpace)
-    return $ if length list == 1 then head list else Stmts list
+    if length list == 1
+        then
+            return $ head list
+        else
+            -- TODO: Perhaps change this so we go straight to a chain, not a
+            -- list, then a chain?
+            return $ chain list
 ifStmt :: Parser Stmt
 ifStmt = do
     reserved "if"
@@ -112,9 +134,19 @@ assignStmt = do
     reservedOp "="
     expr <- aExpression
     return $ Assign var expr
-continueStmt :: Parser Stmt
-continueStmt = reserved "continue" >> return Continue
+skipStmt :: Parser Stmt
+skipStmt = reserved "skip" >> return Skip
 
+-- Defining Value Parsers
+-- In-order precendence of the different values.
+value :: Parser Value
+value =   (reserved "true"  >> return (BoolValue True ))
+      <|> (reserved "false" >> return (BoolValue False))
+      <|> liftM IntValue integer
+      <|> liftM StringValue stringLiteral
+      <|> liftM FuncValue statement
+
+-- Defining Expression Parsers
 aExpression :: Parser ExprArith
 aExpression = buildExpressionParser aOperators aTerm
 bExpression :: Parser ExprBool
@@ -133,13 +165,12 @@ bOperators = [ [ Prefix (reservedOp "not" >> return (Not             ))         
                , Infix  (reservedOp "or"  >> return (BinComb Or      )) AssocLeft
                ]
              ]
--- Terms!
+-- Terms, used in Expressions
 aTerm =   parens aExpression
       <|> liftM Var identifier
-      <|> liftM Number integer
+      <|> liftM ValArith value
 bTerm =   parens bExpression
-      <|> (reserved "true"  >> return (BoolConst True ))
-      <|> (reserved "false" >> return (BoolConst False))
+      <|> liftM ValBool value
       <|> rExpression
 rExpression = do
     a1 <- aExpression

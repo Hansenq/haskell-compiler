@@ -5,7 +5,7 @@ prev = 1
 prevPrev = 1
 while counter < N do
     if counter < 2 then
-        continue
+        skip
     else
         temp = prev + prevPrev
         prevPrev = prev
