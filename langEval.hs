@@ -7,7 +7,8 @@ import qualified Data.Maybe as Maybe
 
 type Valuation = Map.Map String Value
 -- type Types = Map.Map String Type
-type FuncStorage = Map.Map String ([String], Stmt)
+-- Function: name, ([argNames], funcBody, Memoisation Map)
+type FuncStorage = Map.Map String ([String], Stmt, Map.Map [Value] Value)
 
 eval :: Stmt -> Valuation -> FuncStorage -> (Value, Valuation, FuncStorage)
 eval s env fEnv = case s of
@@ -27,7 +28,7 @@ eval s env fEnv = case s of
                                 (BoolValue False) ->    (BoolValue True, env, fEnv)
                                 -- Return true after while loops
     Skip  ->                (BoolValue False, env, fEnv)
-    Func name args st ->    (BoolValue True, env, Map.insert name (args, st) fEnv)
+    Func name args st ->    (BoolValue True, env, Map.insert name (args, st, Map.empty) fEnv)
     _ ->                    error "Statement not found."
 
 evalExpr :: Expr -> Valuation -> FuncStorage -> Value
@@ -41,10 +42,13 @@ evalExpr expr env fEnv = case expr of
     FuncCall name args ->   let -- Convert Expr to Values
                                 argValues = map (\e -> evalExpr e env fEnv) args
                                 -- Create local Map for function call. Add in arguments.
-                                (argNames, stmt) = fEnv Map.! name
-                                tempEnv = Map.fromList (zip argNames argValues)
-                                (val, tempEnv', _) = eval stmt tempEnv fEnv
-                            in  Maybe.fromMaybe val (Map.lookup "output" tempEnv')
+                                (argNames, stmt, cache) = fEnv Map.! name
+                                -- Memoisation
+                                val = Map.lookup argValues cache
+                            in  case val of
+                                Just v ->   v
+                                Nothing ->  let (val, tempEnv', _) = eval stmt (Map.fromList (zip argNames argValues)) fEnv
+                                            in  Maybe.fromMaybe val (Map.lookup "output" tempEnv')
 
 valNegate :: Value -> Value
 valNegate (IntValue val)  = IntValue (- val)

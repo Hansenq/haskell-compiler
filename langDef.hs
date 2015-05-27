@@ -13,10 +13,25 @@ import qualified Text.Parsec.Token as Token
 
 type Parser = Parsec String ()
 
+data Type   = IntType
+            | BoolType
+            | StringType
+
 data Value = IntValue Integer
            | BoolValue Bool
            -- | StringValue String
            deriving (Show)
+
+instance Eq Value where
+    IntValue i1 == IntValue i2 = i1 == i2
+    BoolValue b1 == BoolValue b2 = b1 == b2
+    _ == _ = False
+
+instance Ord Value where
+    compare (IntValue i1) (IntValue i2) = compare i1 i2
+    compare (BoolValue b1) (BoolValue b2) = compare b1 b2
+    compare (BoolValue _) (IntValue _) = LT
+    compare (IntValue _) (BoolValue _) = GT
 
 -- data ExprBool = ValBool Value
 --               | Not ExprBool
