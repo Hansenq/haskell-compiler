@@ -1,10 +1,36 @@
-N = 10
-prev = 1
-if not prev == 1 then
-    N = 20
-else
-    N = 30
-
-while N < 50 do
-    N = N + 1
+// Function syntax
+def fib N begin
+    // Need parens below.
+    if (N == 0) or (N == 1) then
+        output = 1
+        // Output is reserved word; it's the return value of the function.
+    else
+        prev = N - 1
+        prevPrev = N - 2
+        // Function calls must be on separate lines
+        prevVal = call fib prev end
+        prevPrevVal = call fib prevPrev end
+        output = prevVal + prevPrevVal
+    end
 end
+
+N = 10
+counter = 0
+temp = 0
+prev = 1
+prevPrev = 1
+while (counter < N) or (counter == N) do
+    if counter < 2 then
+        skip
+    else
+        temp = prev + prevPrev
+        prevPrev = prev
+        prev = temp
+    end
+    counter = counter + 1
+end
+
+output1 = call fib N end
+output2 = prev
+
+output = output1

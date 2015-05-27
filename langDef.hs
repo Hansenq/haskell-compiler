@@ -15,8 +15,7 @@ type Parser = Parsec String ()
 
 data Value = IntValue Integer
            | BoolValue Bool
-           | StringValue String
-           | FuncValue Stmt
+           -- | StringValue String
            deriving (Show)
 
 -- data ExprBool = ValBool Value
@@ -39,6 +38,7 @@ data Expr   = Var String
             | Val Value
             | Negate Expr
             | Comb OpComb Expr Expr
+            | FuncCall String [Expr]
             deriving (Show)
 
 data OpComb = EqualTo
@@ -56,15 +56,22 @@ data Stmt = Seq Stmt Stmt -- or Seq Stmt Stmt, makes more conceptual sense
           | Assign String Expr
           | If Expr Stmt Stmt
           | While Expr Stmt
+          | Func String [String] Stmt
+          | ExprStmt Expr
           | Skip
           deriving (Show)
 
 languageDef =
     emptyDef { Token.identStart      = letter
              , Token.identLetter     = alphaNum
+             , Token.commentLine     = "//"
              , Token.reservedNames   = [ "if"
                                        , "then"
+                                       , "def"
+                                       , "call"
+                                       , "begin"
                                        , "end"
+                                       -- , "output"
                                        , "else"
                                        , "while"
                                        , "do"
@@ -101,8 +108,10 @@ statement =  parens statement
 statement' :: Parser Stmt
 statement' =   ifStmt
            <|> whileStmt
-           <|> assignStmt
            <|> skipStmt
+           <|> assignStmt
+           <|> funcStmt
+           <|> exprStmt
 chain :: [Stmt] -> Stmt
 chain (x:[]) = x
 chain s = foldr1 (\x acc -> Seq x acc) s
@@ -125,6 +134,7 @@ ifStmt = do
     stmt1 <- statement
     reserved "else"
     stmt2 <- statement
+    reserved "end"
     return $ If cond stmt1 stmt2
 whileStmt :: Parser Stmt
 whileStmt = do
@@ -142,6 +152,21 @@ assignStmt = do
     return $ Assign var expr
 skipStmt :: Parser Stmt
 skipStmt = reserved "skip" >> return Skip
+funcStmt :: Parser Stmt
+funcStmt = do
+    reservedOp "def"
+    name <- identifier
+    args <- (sepBy identifier whiteSpace)
+    reservedOp "begin"
+    stmts <- statement
+    reservedOp "end"
+    return $ Func name args stmts
+    -- Perhaps we only need the number of arguments?
+exprStmt :: Parser Stmt
+exprStmt = do
+    expr <- aExpression
+    return $ ExprStmt expr
+
 
 -- Defining Value Parsers
 -- In-order precendence of the different values.
@@ -149,14 +174,20 @@ value :: Parser Value
 value =   (reserved "true"  >> return (BoolValue True ))
       <|> (reserved "false" >> return (BoolValue False))
       <|> liftM IntValue integer
-      <|> liftM StringValue stringLiteral
-      <|> liftM FuncValue statement
+      -- <|> liftM StringValue stringLiteral
 
 -- Defining Expression Parsers
 aExpression :: Parser Expr
-aExpression =   parens aExpression
-            -- <|> rExpression
-            <|> buildExpressionParser aOperators aTerm
+aExpression =   buildExpressionParser aOperators aTerm
+            <|> parens aExpression
+            <|> funcCallStmt
+funcCallStmt :: Parser Expr
+funcCallStmt = do
+    reservedOp "call"
+    name <- identifier
+    args <- sepBy aTerm whiteSpace
+    reservedOp "end"
+    return $ FuncCall name args
 -- bExpression :: Parser ExprBool
 -- bExpression = buildExpressionParser bOperators bTerm
 -- Define lists for operator precedence
@@ -184,7 +215,6 @@ aTerm :: Parser Expr
 aTerm =   parens aExpression
       <|> liftM Var identifier
       <|> liftM Val value
-      -- This doesn't work. Why??
 -- bTerm =   parens bExpression
 --       <|> liftM ValBool value
 --       <|> rExpression
