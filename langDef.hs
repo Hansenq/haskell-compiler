@@ -69,7 +69,7 @@ data OpComb = EqualTo
             | Div
             deriving (Show)
 
-data Stmt = Seq Stmt Stmt -- or Seq Stmt Stmt, makes more conceptual sense
+data Stmt = Seq Stmt Stmt
           | Assign String Expr
           | If Expr Stmt Stmt
           | While Expr Stmt
@@ -77,6 +77,9 @@ data Stmt = Seq Stmt Stmt -- or Seq Stmt Stmt, makes more conceptual sense
           | ExprStmt Expr
           | Skip
           deriving (Show)
+
+-- data Block = Seq Block Block
+--            | Func String [String] Stmt
 
 languageDef =
     emptyDef { Token.identStart      = letter
@@ -117,6 +120,16 @@ whiteSpace = Token.whiteSpace lexer
 
 parser :: Parser Stmt
 parser = whiteSpace >> statement
+
+-- Defining Block Parsers
+-- block :: Parser Block
+-- block = seqBlock
+-- seqBlock :: Parser Block
+-- seqBlock = do
+--     list <- (sepBy1 funcStmt whiteSpace)
+--     if length list == 1 then (return $ head list) else (return $ chain list)
+-- TODO: Do we want to get rid of global statements, and force everything
+-- to be inside a function?
 
 -- Defining Statement Parsers
 statement :: Parser Stmt

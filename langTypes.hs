@@ -7,6 +7,30 @@ import qualified Data.Maybe as Maybe
 
 type Types = Map.Map String Type
 type FuncStorage = Map.Map String ([String], Stmt)
+type FuncStmts = Map.Map String Stmt
+
+-- Takes an ASN and separates out the function definitions.
+sepFuncs :: Stmt -> FuncStmts -> (Stmt, FuncStmts)
+sepFuncs (Seq st1 st2) funcs =          let (st1', funcs') = sepFuncs st1 funcs
+                                            (st2', funcs'') = sepFuncs st2 funcs'
+                                        in  ((Seq st1' st2'), funcs'')
+sepFuncs (If expr st1 st2) funcs =      let (st1', funcs') = sepFuncs st1 funcs
+                                            (st2', funcs'') = sepFuncs st2 funcs'
+                                        in  ((If expr st1' st2'), funcs'')
+sepFuncs (While expr st) funcs =        let (st', funcs') = sepFuncs st funcs
+                                        in  ((While expr st'), funcs')
+sepFuncs (Func name args st) funcs =    (Skip, Map.insert name (Func name args st) funcs)
+sepFuncs a b =                          (a, b)
+
+-- Takes an Abstract Syntax Notation (with no function definitions) and
+-- returns an AST.
+toTree :: Stmt -> Stmt
+toTree (Seq (If expr st1 st2) endSt) =  (If expr (toTree (Seq st1 endSt)) (toTree (Seq st2 endSt)))
+toTree (Seq st1 st2) =                  (Seq (toTree st1) (toTree st2))
+toTree (If expr st1 st2) =              (If expr (toTree st1) (toTree st2))
+toTree (While expr st) =                (While expr (toTree st))
+toTree (Func name args st) =            (Func name args (toTree st))
+toTree x =                              x
 
 checkStmt :: Stmt -> Types -> FuncStorage -> (Bool, Types, FuncStorage)
 checkStmt s env fEnv = case s of
@@ -22,8 +46,8 @@ checkStmt s env fEnv = case s of
                                 (bool2, env', fEnv') = checkStmt st1 env fEnv
                                 (b1, _, _) = checkEqual bool1 bool2 [expr] (env', fEnv')
                                 (bool3, env'', fEnv'') = checkStmt st2 env' fEnv'
+                            -- TODO: This statement currently doesn't work because the AST is not a tree
                             in  checkEqual b1 bool3 [expr] (env'', fEnv'')
-                                -- TODO: Does this correctly take care of forks? Use Theoretical Model.
     While expr st ->        let bool1 = (checkExpr expr env fEnv) == BoolType
                                 (bool2, env', fEnv') = checkStmt st env fEnv
                             in  checkEqual bool1 bool2 [expr] (env', fEnv')
@@ -75,10 +99,22 @@ newBool bool = BoolValue bool BoolType
 newInt :: Integer -> Value
 newInt int = IntValue int IntType
 
-evalFile :: String -> IO (Bool, Types, FuncStorage)
-evalFile file = do
+typeFile :: String -> IO (Bool, Types, FuncStorage)
+typeFile file = do
     stmt <- parseFile file
+    putStrLn "### Raw ASN: "
     print stmt
-    let (val, env, fEnv) = checkStmt stmt Map.empty Map.empty
-    putStrLn $ "Output is: " ++ (show $ env Map.! "output")
-    return (val, env, fEnv)
+    putStrLn ""
+    let (stmt', funcs) = sepFuncs stmt Map.empty
+        listFuncs = Map.elems funcs
+    putStrLn "### ASN after Function Separation is: "
+    print stmt'
+    putStrLn "### Functions: "
+    print listFuncs
+    putStrLn ""
+    let asns = stmt':listFuncs
+        trees = map (\s -> toTree s) asns
+    putStrLn "### ASTs:"
+    print trees
+    let (b, types, funcSt) = checkStmt stmt' Map.empty Map.empty
+    return (b, types, funcSt)

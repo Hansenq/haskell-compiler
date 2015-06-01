@@ -63,7 +63,6 @@ evalExpr expr env fEnv = case expr of
                                                 -- Adds the function with updated cache back into fEnv''
                                                 funcStorage = Map.insert name (argNames, stmt, map) fEnv''
                                             in  (output, funcStorage)
-                                            -- TODO: FIX CACHING ISSUE WHY???
 
 valNegate :: Value -> Value
 valNegate (IntValue val _)  = newInt (- val)
