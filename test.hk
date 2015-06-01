@@ -1,36 +1,7 @@
-// Function syntax
-def fib N begin
-    // Need parens below.
-    if (N == 0) or (N == 1) then
-        output = 1
-        // Output is reserved word; it's the return value of the function.
-    else
-        prev = N - 1
-        prevPrev = N - 2
-        // Function calls must be on separate lines
-        prevVal = call fib prev end
-        prevPrevVal = call fib prevPrev end
-        output = prevVal + prevPrevVal
-    end
+def addOne N begin
+    output = N + 1
 end
 
-N = 10
-counter = 0
-temp = 0
-prev = 1
-prevPrev = 1
-while (counter < N) or (counter == N) do
-    if counter < 2 then
-        skip
-    else
-        temp = prev + prevPrev
-        prevPrev = prev
-        prev = temp
-    end
-    counter = counter + 1
-end
-
-output1 = call fib N end
-output2 = prev
-
-output = output1
+output = call addOne 1 end
+res2 = call addOne 3 end
+res3 = call addOne 5 end

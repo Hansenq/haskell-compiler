@@ -10,28 +10,30 @@ import Text.Parsec
 import Text.Parsec.Expr
 import Text.Parsec.Language
 import qualified Text.Parsec.Token as Token
+import Debug.Trace
 
 type Parser = Parsec String ()
 
 data Type   = IntType
             | BoolType
-            | StringType
+            -- | StringType
+            deriving (Show, Eq)
 
-data Value = IntValue Integer
-           | BoolValue Bool
+data Value = IntValue Integer Type
+           | BoolValue Bool Type
            -- | StringValue String
            deriving (Show)
 
 instance Eq Value where
-    IntValue i1 == IntValue i2 = i1 == i2
-    BoolValue b1 == BoolValue b2 = b1 == b2
+    IntValue i1 t1 == IntValue i2 t2 = ((i1 == i2) && (t1 == t2))
+    BoolValue b1 t1 == BoolValue b2 t2 = ((b1 == b2) && (t1 == t2))
     _ == _ = False
 
 instance Ord Value where
-    compare (IntValue i1) (IntValue i2) = compare i1 i2
-    compare (BoolValue b1) (BoolValue b2) = compare b1 b2
-    compare (BoolValue _) (IntValue _) = LT
-    compare (IntValue _) (BoolValue _) = GT
+    compare (IntValue i1 _) (IntValue i2 _) = compare i1 i2
+    compare (BoolValue b1 _) (BoolValue b2 _) = compare b1 b2
+    compare (BoolValue _ _) (IntValue _ _) = LT
+    compare (IntValue _ _) (BoolValue _ _) = GT
 
 -- data ExprBool = ValBool Value
 --               | Not ExprBool
@@ -186,9 +188,11 @@ exprStmt = do
 -- Defining Value Parsers
 -- In-order precendence of the different values.
 value :: Parser Value
-value =   (reserved "true"  >> return (BoolValue True ))
-      <|> (reserved "false" >> return (BoolValue False))
-      <|> liftM IntValue integer
+value =   (reserved "true"  >> return (BoolValue True BoolType))
+      <|> (reserved "false" >> return (BoolValue False BoolType))
+      <|> liftM (`IntValue` IntType) integer
+      -- See liftM documentation. This makes IntType the second argument to IntValue,
+      -- letting liftM add the first argument.
       -- <|> liftM StringValue stringLiteral
 
 -- Defining Expression Parsers
@@ -196,6 +200,9 @@ aExpression :: Parser Expr
 aExpression =   buildExpressionParser aOperators aTerm
             <|> parens aExpression
             <|> funcCallStmt
+    -- TODO: USe this instead.
+    -- (\lhs _ op _ rhs -> )  <$> aExpression <* pSpace <*> relOp <*> pSpace <*> aExpression
+     -- <$>
 funcCallStmt :: Parser Expr
 funcCallStmt = do
     reservedOp "call"
@@ -234,7 +241,7 @@ aTerm =   parens aExpression
 --       <|> liftM ValBool value
 --       <|> rExpression
 -- rExpression :: Parser Expr
--- rExpression = do
+-- rExpression = trace "rExpression" $ do
 --     a1 <- aExpression
 --     op <- relation
 --     a2 <- aExpression
