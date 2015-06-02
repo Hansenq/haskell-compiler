@@ -1,16 +1,13 @@
-def addOne N begin
-    output = N + 1
+def integerFunc primArg emptyArg begin
+    arg2 = primArg + primArg
+    arg3 = 3
+    output = arg3
 end
 
-def testIf begin
-    if 1 == 2 then
-        output = 1
-    else
-        output = True
-    end
-    invalid = output
+def negation arg1 arg2 begin
+    arg2 = -arg1
 end
 
-output = call addOne 1 end
-res2 = call addOne 3 end
-res3 = call addOne 5 end
+def boolean arg1 arg2 begin
+    arg3 = arg1 == arg2
+end

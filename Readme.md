@@ -10,3 +10,8 @@ Trinity Term 2015
 - `langEval.hs` contains code that evaluates the language.
 - `langTypes.hs` contains code that checks the types in the language.
 - `fib.hk` and `test.hk` are files written in the language, used for testing.
+
+
+TODO:
+- Soft typing for functions
+- Match function call types with possible types functions arguments can be.

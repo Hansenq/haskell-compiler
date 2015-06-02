@@ -19,6 +19,12 @@ data Type   = IntType
             -- | StringType
             deriving (Show, Eq)
 
+instance Ord Type where
+    compare IntType IntType = EQ
+    compare BoolType BoolType = EQ
+    compare IntType BoolType = LT
+    compare BoolType IntType = GT
+
 data Value = IntValue Integer Type
            | BoolValue Bool Type
            -- | StringValue String
@@ -67,7 +73,7 @@ data OpComb = EqualTo
             | Sub
             | Mult
             | Div
-            deriving (Show)
+            deriving (Show, Eq)
 
 data Stmt = Seq Stmt Stmt
           | Assign String Expr

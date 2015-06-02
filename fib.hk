@@ -34,3 +34,21 @@ output1 = call fib N end
 output2 = prev
 
 output = output1
+
+// Code that tests function memoisation
+def addOne N begin
+    output = N + 1
+end
+
+def testIf begin
+    if 1 == 2 then
+        output = 1
+    else
+        output = True
+    end
+    invalid = output
+end
+
+output = call addOne 1 end
+res2 = call addOne 3 end
+res3 = call addOne 5 end
