@@ -1,13 +1,6 @@
-def integerFunc primArg emptyArg begin
-    arg2 = primArg + primArg
-    arg3 = 3
-    output = arg3
-end
-
-def negation arg1 arg2 begin
-    arg2 = -arg1
-end
-
-def boolean arg1 arg2 begin
-    arg3 = arg1 == arg2
+def fib num begin
+    prev = call fib (num - 1) end
+    prevPrev = call fib (num - 2) end
+    incorrect = call fib true end
+    output = prev + prevPrev
 end

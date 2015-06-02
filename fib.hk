@@ -35,6 +35,7 @@ output2 = prev
 
 output = output1
 
+
 // Code that tests function memoisation
 def addOne N begin
     output = N + 1
@@ -44,7 +45,7 @@ def testIf begin
     if 1 == 2 then
         output = 1
     else
-        output = True
+        output = true
     end
     invalid = output
 end
@@ -52,3 +53,22 @@ end
 output = call addOne 1 end
 res2 = call addOne 3 end
 res3 = call addOne 5 end
+
+
+// Testing function separation, conversion to AST,
+// and soft typing without recursion.
+def integerFunc primArg emptyArg begin
+    arg2 = primArg + primArg
+    arg3 = 3
+    output = arg3
+end
+
+def negation arg1 arg2 begin
+    arg2 = -arg1
+    output = arg2
+end
+
+def boolean arg1 arg2 begin
+    arg3 = arg1 == arg2
+    output = arg1
+end

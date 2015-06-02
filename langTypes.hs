@@ -11,6 +11,8 @@ type Types = Map.Map String Type
 type FuncStorage = Map.Map String ([String], Stmt)
 type Tree = Stmt
 type FuncStmts = Map.Map String ([String], Tree)
+type PossTypes = Map.Map String (Set.Set Type)
+type FuncInfo = Map.Map String ([String], PossTypes)
 
 -- Takes an ASN and separates out the function definitions.
 sepFuncs :: Stmt -> FuncStmts -> (Stmt, FuncStmts)
@@ -35,54 +37,99 @@ toTree (While expr st) =                (While expr (toTree st))
 toTree (Func name args st) =            (Func name args (toTree st))
 toTree x =                              x
 
-analyzeTypesFunc :: Tree -> (String, Map.Map String (Set.Set Type))
-analyzeTypesFunc (Func name args st) =    (name, analyzeTypes st (Map.fromList (zip args (repeat (Set.fromList [IntType, BoolType])))))
+analyzeTypesFunc :: Tree -> FuncInfo -> (String, ([String], PossTypes))
+analyzeTypesFunc (Func name args st) myFuncs =
+    (name, (args, analyzeTypes st (Map.fromList (zip args (repeat (Set.fromList [IntType, BoolType])))) myFuncs))
 
 -- Takes a tree and a Map from variable name to a set of all possible
 -- types the variable can take.
-analyzeTypes :: Tree -> Map.Map String (Set.Set Type) -> Map.Map String (Set.Set Type)
-analyzeTypes (Seq st1 st2) myMap =      let myMap' = analyzeTypes st1 myMap
-                                        in  analyzeTypes st2 myMap'
-analyzeTypes (Assign var expr) myMap =  let typSet = checkExpr expr myMap
-                                        in  mergeTypeMap myMap (Map.singleton var typSet)
-analyzeTypes (If expr st1 st2) myMap =  let myMap1 = analyzeTypes st1 myMap
-                                            myMap2 = analyzeTypes st2 myMap
-                                        in mergeTypeMap myMap1 myMap2
-analyzeTypes (While expr st) myMap =    analyzeTypes st myMap
-analyzeTypes (Skip) myMap =             myMap
-analyzeTypes (Func name _ _) myMap =    error ("Function " ++ name ++ " should not be in the tree!")
+analyzeTypes :: Tree -> PossTypes -> FuncInfo -> PossTypes
+analyzeTypes (Seq st1 st2) myMap myFuncs =      let myMap' = analyzeTypes st1 myMap myFuncs
+                                                in  analyzeTypes st2 myMap' myFuncs
+analyzeTypes (Assign var expr) myMap myFuncs =  let (myMap', typSet) = checkExpr expr myMap myFuncs
+                                                in  mergeTypeMap myMap' (Map.singleton var typSet)
+analyzeTypes (If expr st1 st2) myMap myFuncs =  let myMap1 = analyzeTypes st1 myMap myFuncs
+                                                    myMap2 = analyzeTypes st2 myMap myFuncs
+                                                in mergeTypeMap myMap1 myMap2
+analyzeTypes (While expr st) myMap myFuncs =    analyzeTypes st myMap myFuncs
+analyzeTypes (Skip) myMap myFuncs =             myMap
+analyzeTypes (Func name _ _) myMap myFuncs =    error ("Function " ++ name ++ " should not be in the tree!")
 
-mergeTypeMap :: Map.Map String (Set.Set Type) -> Map.Map String (Set.Set Type) -> Map.Map String (Set.Set Type)
-mergeTypeMap map1 map2 = Map.unionWithKey (\k s1 s2 ->
-                                case Set.null (Set.difference s1 s2) || Set.null (Set.intersection s1 s2) of
-                                    True ->     Set.intersection s1 s2
-                                    False ->    error ((show s1) ++ " does not match " ++ (show s2) ++ " for " ++ (show k))
-                                ) map1 map2
+mergeTypeMap :: PossTypes -> PossTypes -> PossTypes
+mergeTypeMap map1 map2 = Map.unionWith (\s1 s2 -> mergeTypeSet s1 s2) map1 map2
+
+mergeTypeSet :: Set.Set Type -> Set.Set Type -> Set.Set Type
+mergeTypeSet set1 set2 = case Set.null (Set.intersection set1 set2) of
+                                    False ->    Set.intersection set1 set2
+                                    True ->     error ((show set1) ++ " does not match " ++ (show set2))
 
 checkEqual :: Show a => Bool -> Bool -> [a] -> Bool
 checkEqual b1 b2 lst = case (b1 == b2) of
     True ->     True
     False ->    error (foldl (\acc x -> acc ++ x) "" ("Incorrect Types: ":(map show lst)))
 
-checkExpr :: Expr -> Map.Map String (Set.Set Type) -> Set.Set Type
-checkExpr expr env = case expr of
-    Var str ->              env Map.! str
+checkExpr :: Expr -> PossTypes -> FuncInfo -> (PossTypes, Set.Set Type)
+checkExpr expr env funcs = case expr of
+    Var str ->              (env, env Map.! str)
     Val val ->              case val of
-                                IntValue i1 typ ->  Set.singleton typ
-                                BoolValue b1 typ -> Set.singleton typ
-    Negate expr' ->         checkExpr expr' env
-    Comb op ex1 ex2 ->      let typ1 = checkExpr ex1 env
-                                typ2 = checkExpr ex2 env
-                            in  valComb op typ1 typ2
-    -- FuncCall name args ->   let -- Convert Expr to Types
-    --                             argTypes = map (\e -> checkExpr e env fEnv) args
-    --                             -- Create local Map for function call. Add in arguments.
-    --                             (argNames, stmt) = fEnv Map.! name
-    --                             tempTypes = Map.fromList (zip argNames argTypes)
-    --                             (bool1, tempTypes', _) = checkStmt stmt tempTypes fEnv
-    --                         in  Maybe.fromJust (Map.lookup "output" tempTypes')
-    --                   `          -- Throws type error when "output" is not assigned.
-    --                             -- TODO: Is this intended behavior?
+                                IntValue i1 typ ->  (env, Set.singleton typ)
+                                BoolValue b1 typ -> (env, Set.singleton typ)
+    Negate expr' ->         checkExpr expr' env funcs
+    Comb op ex1 ex2 ->      let (env', typ1) = checkExpr ex1 env funcs
+                                (env'', typ2) = checkExpr ex2 env' funcs
+                                env''' = equalizeTermTypes op (ex1,typ1) (ex2,typ2) env'' funcs
+                                resType = valComb op typ1 typ2
+                            in  (env''', resType)
+    FuncCall name args ->   case Map.lookup name funcs of -- TODO: funcs can be empty map
+                                Just res ->
+                                    let (funcArgNames, funcVarTypes) = res
+                                        -- TODO: Map.! fails when an argument of a function doesn't have a type.
+                                        funcArgReqTypes = map (\argName -> funcVarTypes Map.! argName) funcArgNames -- Should be [Set, Set, ...]
+                                        -- args is a list of expressions. This updates the list of types for each variable, then
+                                        -- returns the list of types for each argument.
+                                        env' = foldl (\acc x -> fst $ checkExpr x acc funcs) env args
+                                        varTypes = map (\arg -> snd $ checkExpr arg env funcs) args
+                                        -- If any arguments do not fit the type, the error should be thrown here.
+                                        mergedArgTypes = map (\(var, arg) -> mergeTypeSet var arg) (zip varTypes funcArgReqTypes)
+                                        -- TODO: Need this if statement here because otherwise (lazy) Haskell won't evaluate mergedArgTypes.
+                                        str = if (foldl (\acc x -> acc || Set.null x) False mergedArgTypes) == True then error "Arguments do not match declaration" else "output"
+                                        outputType = funcVarTypes Map.! str -- TODO: what if there is none
+                                    in  (env', outputType)
+                                Nothing -> (env, Set.fromList [IntType, BoolType])
+
+-- Takes a Comb operation, for variables involved in the Comb, equalizes both sides so
+-- that they both must have the same type.
+equalizeTermTypes :: OpComb -> (Expr, Set.Set Type) -> (Expr, Set.Set Type) -> PossTypes -> FuncInfo -> PossTypes
+equalizeTermTypes op (ex1, typ1) (ex2, typ2) env funcs
+    | op == EqualTo && (isVar ex1 || isVar ex2) =
+        let intersect = Set.intersection typ1 typ2
+            -- Hack
+            intersect2 = if Set.null intersect then error "Types in the expression don't match!" else intersect
+        in  case (ex1, ex2) of
+                (Var v1, Var v2) ->     Map.insert v1 intersect2 (Map.insert v2 intersect2 env)
+                (Var v1, _) ->          Map.insert v1 intersect2 env
+                (_, Var v2) ->          Map.insert v2 intersect2 env
+    | op `elem` [GreaterThan, LessThan, Add, Sub, Mult, Div]
+        && (isVar ex1 || isVar ex2) =
+        let resType = Set.singleton IntType
+            intersect = if Set.null (Set.intersection typ1 typ2) then error "Types in the expression don't match!" else resType
+        in  case (ex1, ex2) of
+                (Var v1, Var v2) ->     Map.insert v1 intersect (Map.insert v2 intersect env)
+                (Var v1, _) ->          Map.insert v1 intersect env
+                (_, Var v2) ->          Map.insert v2 intersect env
+    | op `elem` [And, Or]
+        && (isVar ex1 || isVar ex2) =
+        let resType = Set.singleton BoolType
+            intersect = if Set.null (Set.intersection typ1 typ2) then error "Types in the expression don't match!" else resType
+        in  case (ex1, ex2) of
+                (Var v1, Var v2) ->     Map.insert v1 intersect (Map.insert v2 intersect env)
+                (Var v1, _) ->          Map.insert v1 intersect env
+                (_, Var v2) ->          Map.insert v2 intersect env
+    | otherwise = env
+
+isVar :: Expr -> Bool
+isVar (Var v) = True
+isVar _ =       False
 
 valComb :: OpComb -> Set.Set Type -> Set.Set Type -> Set.Set Type
 valComb op s1 s2
@@ -107,6 +154,7 @@ typeFile file = do
     putStrLn "### Raw ASN: "
     print stmt
     putStrLn ""
+    -- Separate out functions from the global statements
     let (stmt', funcs) = sepFuncs stmt Map.empty
         listFuncs = Map.elems funcs
         (listFuncArgs, listFuncStmts) = unzip listFuncs
@@ -115,16 +163,33 @@ typeFile file = do
     putStrLn "### Functions: "
     print listFuncStmts
     putStrLn ""
+    -- Change the global statements and the function statements to ASTs
     let globalTree = toTree stmt'
         listFuncTrees = map (\s -> toTree s) listFuncStmts
     putStrLn "### ASTs:"
     print globalTree
     print listFuncTrees
     putStrLn ""
-    let listFuncArgTypes = map (\tr -> analyzeTypesFunc tr) listFuncTrees
+    -- Soft Typing: Obtain possible types for every variable in each function
+    let listFuncArgTypes = map (\tr -> analyzeTypesFunc tr Map.empty) listFuncTrees
     putStrLn "### Function arguments with possible types: "
-    print listFuncArgTypes
+    print listFuncArgTypes -- [(name, ([args], Map varName (Set Type))), ...]
     putStrLn ""
+    -- Get output type from function
+    let funcTypes = Map.fromList listFuncArgTypes
+        listFuncArgTypes2 = map (\tr -> analyzeTypesFunc tr funcTypes) listFuncTrees
+    putStrLn "### Function arguments with possible types (2): "
+    print listFuncArgTypes2 -- [(name, ([args], Map varName (Set Type))), ...]
+    putStrLn ""
+    -- Get output type from function
+    let funcTypes = Map.fromList listFuncArgTypes2
+        listFuncArgTypes3 = map (\tr -> analyzeTypesFunc tr funcTypes) listFuncTrees
+    putStrLn "### Function arguments with possible types (3): "
+    print listFuncArgTypes3 -- [(name, ([args], Map varName (Set Type))), ...]
+    putStrLn ""
+    -- TODO: How many times do we have to repeat this until all types are accurate?
+
+    -- Analyze global statements down here (after we know everything about the functions)
     -- let (b, types, funcSt) = checkStmt stmt' Map.empty Map.empty
     -- return (b, types, funcSt)
     return (True, Map.empty, Map.empty)
