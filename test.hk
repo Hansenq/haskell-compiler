@@ -1,6 +1,16 @@
-def fib num begin
-    prev = call fib (num - 1) end
-    prevPrev = call fib (num - 2) end
-    incorrect = call fib true end
-    output = prev + prevPrev
+def fib N begin
+    // Need parens below.
+    if (N == 0) or (N == 1) then
+        output = 1
+        // Output is reserved word; it's the return value of the function.
+    else
+        prev = N - 1
+        prevPrev = N - 2
+        // Function calls must be on separate lines
+        prevVal = call fib prev end
+        prevPrevVal = call fib prevPrev end
+        output = prevVal + prevPrevVal
+    end
 end
+output = call fib 10 end
+

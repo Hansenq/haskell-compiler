@@ -9,7 +9,7 @@ import Debug.Trace
 type Valuation = Map.Map String Value
 -- type Types = Map.Map String Type
 -- Function: name, ([argNames], funcBody, Memoisation Map)
-type FuncStorage = Map.Map String ([String], Stmt, Map.Map [Value] Value)
+type FuncStorage = Map.Map String ([String], Stmt, Map.Map [Value] Value, (Integer, Integer))
 
 eval :: Stmt -> Valuation -> FuncStorage -> (Value, Valuation, FuncStorage)
 eval s env fEnv = case s of
@@ -30,7 +30,7 @@ eval s env fEnv = case s of
                                 -- Return true after while loops
     Skip  ->                (BoolValue False BoolType, env, fEnv)
     -- Add in ExprStmt Expr
-    Func name args st ->    (BoolValue True BoolType, env, (Map.insert name (args, st, Map.empty) fEnv))
+    Func name args st ->    (BoolValue True BoolType, env, (Map.insert name (args, st, Map.empty, (0,0)) fEnv))
     _ ->                    error "Statement not found."
 
 -- State Monad
@@ -49,19 +49,20 @@ evalExpr expr env fEnv = case expr of
                                 (argValues, fEnv') = foldl (\(list, fEnv') e -> let (val, fEnv'') = (evalExpr e env fEnv')
                                                                                  in  (list ++ [val], fEnv'')) ([], fEnv) args
                                 -- Create local Map for function call. Add in arguments.
-                                (argNames, stmt, cache) = fEnv' Map.! name
+                                (argNames, stmt, cache, (countCalc, countMem)) = fEnv' Map.! name
                                 -- Memoisation
                                 val = Map.lookup argValues cache
                             in  case val of
-                                Just v ->   (v, fEnv')
+                                Just v ->   let fEnv'' = Map.insert name (argNames, stmt, cache, (countCalc, countMem + 1)) fEnv'
+                                            in  (v, fEnv'')
                                 Nothing ->  let (val, tempEnv', fEnv'') = eval stmt (Map.fromList (zip argNames argValues)) fEnv'
                                                 -- Gets "output"; defaults to val
                                                 output = Maybe.fromMaybe val (Map.lookup "output" tempEnv')
                                                 -- Adds to previous cache
-                                                (_, _, cache') = fEnv'' Map.! name
-                                                map = Map.insert argValues output cache'
+                                                (_, _, cache', (countCalc', countMem')) = fEnv'' Map.! name
+                                                cache'' = Map.insert argValues output cache'
                                                 -- Adds the function with updated cache back into fEnv''
-                                                funcStorage = Map.insert name (argNames, stmt, map) fEnv''
+                                                funcStorage = Map.insert name (argNames, stmt, cache'', (countCalc' + 1, countMem')) fEnv''
                                             in  (output, funcStorage)
 
 valNegate :: Value -> Value
@@ -97,10 +98,26 @@ equateIntBool i b = case i of
     0 -> b == False
     _ -> b == True
 
+getStats :: FuncStorage -> [(String, (Integer, Integer))]
+getStats fEnv = map (\(n, (_, _, _, s)) -> (n, s)) (Map.assocs fEnv)
+
+calcStats :: [(String, (Integer, Integer))] -> String
+calcStats lst = foldl (\acc (name, (calc, mem)) ->
+                    acc ++ ("Function \"" ++ (show name) ++ "\": " ++ (show mem) ++ "/" ++ (show calc) ++ ", " ++ (show ((fromIntegral mem) / (fromIntegral (mem + calc)))))
+                    ) "" lst
+
 evalFile :: String -> IO (Value, Valuation, FuncStorage)
 evalFile file = do
     stmt <- parseFile file
+    putStrLn "### Raw ASN: "
     print stmt
+    putStrLn ""
     let (val, env, fEnv) = eval stmt Map.empty Map.empty
-    putStrLn $ "Output is: " ++ (show $ Maybe.fromMaybe val $ Map.lookup "output" env)
+    putStrLn $ "### Output is: "
+    print (Maybe.fromMaybe val $ Map.lookup "output" env)
+    putStrLn ""
+    let memStats = getStats fEnv
+    putStrLn $ "### Memoisation Stats (% of calls that are memoised): "
+    putStrLn $ calcStats memStats
+    putStrLn ""
     return (val, env, fEnv)
