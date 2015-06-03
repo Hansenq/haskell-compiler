@@ -1,15 +1,47 @@
-
+{-#LANGUAGE RecordWildCards #-}
 module LangEval where
 
 import LangDef
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Debug.Trace
+import Control.Monad.State.Strict 
+-- Control.Monad.State.Lazy
 
 type Valuation = Map.Map String Value
 -- type Types = Map.Map String Type
 -- Function: name, ([argNames], funcBody, Memoisation Map)
 type FuncStorage = Map.Map String ([String], Stmt, Map.Map [Value] Value, (Integer, Integer))
+
+-- Environment data type
+data Env = Env { val :: Valuation, store :: FuncStorage }
+  deriving Show
+
+-- State of the evaluator
+type EvalState a = State Env a
+
+-- Initial Environment
+iEnv :: Env
+iEnv = Env Map.empty Map.empty
+
+-- get :: State Env a -> State Env
+eval' :: Stmt -> EvalState Value
+eval' s =
+  case s of
+    Seq st1 st2 -> do
+      eval' st1
+      eval' st2
+    Assign x expr -> do
+      res <- evalExpr' expr -- computing the value of the expression
+      env@Env{..} <- get    -- getting the new environment after evalExpr
+      let nenv = env { val = Map.insert x res val } -- update the valuation
+      put nenv -- puting the new environment with the updated valuation
+      return res 
+    If expr st1 st2 -> do
+      val <- evalExpr' expr
+      case val of 
+          BoolValue True BoolType -> eval' st1
+          BoolValue False BoolType -> eval' st2
 
 eval :: Stmt -> Valuation -> FuncStorage -> (Value, Valuation, FuncStorage)
 eval s env fEnv = case s of
@@ -32,6 +64,9 @@ eval s env fEnv = case s of
     -- Add in ExprStmt Expr
     Func name args st ->    (BoolValue True BoolType, env, (Map.insert name (args, st, Map.empty, (0,0)) fEnv))
     _ ->                    error "Statement not found."
+
+evalExpr' :: Expr -> EvalState Value
+evalExpr' = undefined
 
 -- State Monad
 -- Create a data type called State, put FuncStorage and counters inside
@@ -112,7 +147,8 @@ evalFile file = do
     putStrLn "### Raw ASN: "
     print stmt
     putStrLn ""
-    let (val, env, fEnv) = eval stmt Map.empty Map.empty
+    let -- (val, env, fEnv) = eval stmt Map.empty Map.empty
+        (val, Env env fEnv) = runState (eval' stmt) iEnv
     putStrLn $ "### Output is: "
     print (Maybe.fromMaybe val $ Map.lookup "output" env)
     putStrLn ""
