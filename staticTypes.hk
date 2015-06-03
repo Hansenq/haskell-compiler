@@ -1,0 +1,7 @@
+def fib int num start
+    int prev = num - 1
+    int prevPrev = num - 2
+    int output = prev + prevPrev
+end
+
+int output = call fib 10 end

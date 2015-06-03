@@ -133,7 +133,7 @@ isVar _ =       False
 
 valComb :: OpComb -> Set.Set Type -> Set.Set Type -> Set.Set Type
 valComb op s1 s2
-    | op == EqualTo && not (Set.null (Set.intersection s1 s2)) = Set.intersection s1 s2
+    | op == EqualTo && not (Set.null (Set.intersection s1 s2)) = Set.singleton BoolType
     | op `elem` [GreaterThan, LessThan]
         && Set.member IntType s1
         && Set.member IntType s2 =
@@ -147,6 +147,14 @@ valComb op s1 s2
         && Set.member IntType s2 =
             Set.singleton IntType
     | otherwise = error ((show s1) ++ " does not match " ++ (show s2) ++ " for operation " ++ (show op))
+
+showFuncSoftTypes :: [(String, ([String], PossTypes))] -> String
+showFuncSoftTypes lst = foldl   (\acc (name, (args, fMap)) ->
+                                    (acc ++ "Function \"" ++ name ++ "\": \n"
+                                        ++ "Args: " ++ (show args) ++ "\n"
+                                        ++ (foldl (\acc (k, set) -> acc ++ "\t" ++ k ++ ": " ++ (show set) ++ "\n") "" (Map.assocs fMap))
+                                        )
+                                ) "" lst
 
 typeFile :: String -> IO (Bool, Types, FuncStorage)
 typeFile file = do
@@ -173,19 +181,19 @@ typeFile file = do
     -- Soft Typing: Obtain possible types for every variable in each function
     let listFuncArgTypes = map (\tr -> analyzeTypesFunc tr Map.empty) listFuncTrees
     putStrLn "### Function arguments with possible types: "
-    print listFuncArgTypes -- [(name, ([args], Map varName (Set Type))), ...]
+    putStrLn $ showFuncSoftTypes listFuncArgTypes -- [(name, ([args], Map varName (Set Type))), ...]
     putStrLn ""
     -- Get output type from function
     let funcTypes = Map.fromList listFuncArgTypes
         listFuncArgTypes2 = map (\tr -> analyzeTypesFunc tr funcTypes) listFuncTrees
     putStrLn "### Function arguments with possible types (2): "
-    print listFuncArgTypes2 -- [(name, ([args], Map varName (Set Type))), ...]
+    putStrLn $ showFuncSoftTypes listFuncArgTypes2 -- [(name, ([args], Map varName (Set Type))), ...]
     putStrLn ""
     -- Get output type from function
     let funcTypes = Map.fromList listFuncArgTypes2
         listFuncArgTypes3 = map (\tr -> analyzeTypesFunc tr funcTypes) listFuncTrees
     putStrLn "### Function arguments with possible types (3): "
-    print listFuncArgTypes3 -- [(name, ([args], Map varName (Set Type))), ...]
+    putStrLn $ showFuncSoftTypes listFuncArgTypes3 -- [(name, ([args], Map varName (Set Type))), ...]
     putStrLn ""
     -- TODO: How many times do we have to repeat this until all types are accurate?
 

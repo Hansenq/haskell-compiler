@@ -1,0 +1,17 @@
+// Testing function separation, conversion to AST,
+// and soft typing without recursion.
+def integerFunc primArg emptyArg start
+    arg2 = primArg + primArg
+    arg3 = 3
+    output = arg3
+end
+
+def negation arg1 arg2 start
+    arg2 = -arg1
+    output = arg2
+end
+
+def boolean arg1 arg2 start
+    arg3 = arg1 == arg2
+    output = arg1
+end
