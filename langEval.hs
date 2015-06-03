@@ -5,7 +5,7 @@ import LangDef
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Debug.Trace
-import Control.Monad.State.Strict 
+import Control.Monad.State.Strict
 -- Control.Monad.State.Lazy
 
 type Valuation = Map.Map String Value
@@ -14,7 +14,7 @@ type Valuation = Map.Map String Value
 type FuncStorage = Map.Map String ([String], Stmt, Map.Map [Value] Value, (Integer, Integer))
 
 -- Environment data type
-data Env = Env { val :: Valuation, store :: FuncStorage }
+data Env = Env { val :: Valuation, store :: FuncStorage, memoise :: Bool }
   deriving Show
 
 -- State of the evaluator
@@ -22,26 +22,40 @@ type EvalState a = State Env a
 
 -- Initial Environment
 iEnv :: Env
-iEnv = Env Map.empty Map.empty
+iEnv = Env Map.empty Map.empty True
 
 -- get :: State Env a -> State Env
 eval' :: Stmt -> EvalState Value
 eval' s =
-  case s of
-    Seq st1 st2 -> do
-      eval' st1
-      eval' st2
-    Assign x expr -> do
-      res <- evalExpr' expr -- computing the value of the expression
-      env@Env{..} <- get    -- getting the new environment after evalExpr
-      let nenv = env { val = Map.insert x res val } -- update the valuation
-      put nenv -- puting the new environment with the updated valuation
-      return res 
-    If expr st1 st2 -> do
-      val <- evalExpr' expr
-      case val of 
-          BoolValue True BoolType -> eval' st1
-          BoolValue False BoolType -> eval' st2
+    case s of
+        Seq st1 st2 -> do
+            eval' st1
+            eval' st2
+        Assign x expr -> do
+            res <- evalExpr' expr   -- computing the value of the expression
+            env@Env{..} <- get      -- getting the new environment after evalExpr.
+                                    -- env is the env variable, while "@Env{..}"
+                                    -- imports 'val' and 'store' variables
+            let nenv = env { val = Map.insert x res val } -- update the valuation in env
+            put nenv                -- puting the new environment with the updated valuation
+            return res
+        If expr st1 st2 -> do
+            val <- evalExpr' expr
+            case val of
+                BoolValue True BoolType ->    eval' st1
+                BoolValue False BoolType ->   eval' st2
+                _ ->     error "IF case fallthrough"
+        While expr st -> do
+            val <- evalExpr' expr
+            case val of
+                BoolValue True BoolType ->  do
+                    eval' st
+                    eval' (While expr st)
+                BoolValue False BoolType -> return $ BoolValue True BoolType
+                _ ->     error "WHILE case fallthrough"
+        Skip -> return $ BoolValue False BoolType
+        _ ->    error "Statement not found"
+
 
 eval :: Stmt -> Valuation -> FuncStorage -> (Value, Valuation, FuncStorage)
 eval s env fEnv = case s of
@@ -66,7 +80,27 @@ eval s env fEnv = case s of
     _ ->                    error "Statement not found."
 
 evalExpr' :: Expr -> EvalState Value
-evalExpr' = undefined
+evalExpr' expr = case expr of
+    Var str -> do
+        env@Env{..} <- get
+        return $ val Map.! str
+    Val val -> return val
+    Negate expr' -> do
+        val <- evalExpr' expr
+        return $ valNegate val
+    FuncCall name args -> do
+        env@Env{..} <- get
+        let argValues = map (\arg -> undefined) args -- TODO: The lambda function in the map.
+            (argNames, stmt, cache, (countCalc, countMem)) = store Map.! name
+            resMaybe = Map.lookup argValues cache
+        undefined
+        -- if resMaybe == (Just _) && memoise
+        --     then -- Fetch from memoisation
+        --         undefined
+        --         -- Can't return here; must return at end of do block (and only one line)
+        --     else
+        --         undefined
+
 
 -- State Monad
 -- Create a data type called State, put FuncStorage and counters inside
@@ -151,7 +185,7 @@ evalFile file = do
     print stmt
     putStrLn ""
     let -- (val, env, fEnv) = eval stmt Map.empty Map.empty
-        (val, Env env fEnv) = runState (eval' stmt) iEnv
+        (val, Env env fEnv True) = runState (eval' stmt) iEnv
     putStrLn $ "### Output is: "
     print (Maybe.fromMaybe val $ Map.lookup "output" env)
     putStrLn ""
