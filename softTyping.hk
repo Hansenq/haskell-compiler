@@ -3,6 +3,7 @@
 def integerFunc primArg emptyArg start
     arg2 = primArg + primArg
     arg3 = 3
+    arg4 = call boolean 1 2 end
     output = arg3
 end
 

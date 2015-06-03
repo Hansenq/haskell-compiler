@@ -87,10 +87,13 @@ evalExpr expr env fEnv = case expr of
                                 (argNames, stmt, cache, (countCalc, countMem)) = fEnv' Map.! name
                                 -- Memoisation
                                 val = Map.lookup argValues cache
-                            in  case val of
-                                Just v ->   let fEnv'' = Map.insert name (argNames, stmt, cache, (countCalc, countMem + 1)) fEnv'
-                                            in  (v, fEnv'')
-                                Nothing ->  let (val, tempEnv', fEnv'') = eval stmt (Map.fromList (zip argNames argValues)) fEnv'
+                            in
+                            -- Comment out the next four lines to disable Memoisation.
+                            --     case val of
+                            --     Just v ->   let fEnv'' = Map.insert name (argNames, stmt, cache, (countCalc, countMem + 1)) fEnv'
+                            --                 in  (v, fEnv'')
+                            --     Nothing ->
+                                            let (val, tempEnv', fEnv'') = eval stmt (Map.fromList (zip argNames argValues)) fEnv'
                                                 -- Gets "output"; defaults to val
                                                 output = Maybe.fromMaybe val (Map.lookup "output" tempEnv')
                                                 -- Adds to previous cache

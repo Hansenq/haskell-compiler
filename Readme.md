@@ -15,3 +15,16 @@ Trinity Term 2015
 TODO:
 -- Differentiating between "int" and "bool" static declarations
 -- Number of passes to go through program for soft typing.
+
+- Memoisation
+- Function Inlining
+- Common Subexpression Simplification
+    - Convert to Tree
+    - Plug in 2nd program into leaves of tree
+    - Convert into logic and find all in leaves
+    - Consolidation, Dead Code Elimination
+- Hoisting
+
+- Inferenced Static Typing
+- Static Typing with Annotations
+- Soft Typing
