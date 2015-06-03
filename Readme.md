@@ -13,5 +13,5 @@ Trinity Term 2015
 
 
 TODO:
-- Soft typing for functions
-- Match function call types with possible types functions arguments can be.
+-- Differentiating between "int" and "bool" static declarations
+-- Number of passes to go through program for soft typing.

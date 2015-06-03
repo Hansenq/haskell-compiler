@@ -2,7 +2,7 @@
 
 -- Doesn't work properly--cannot recognize relational expressions.
 
-module LangDef where
+module LangStaticDef where
 
 import System.IO
 import Control.Monad
@@ -16,6 +16,7 @@ type Parser = Parsec String ()
 
 data Type   = IntType
             | BoolType
+            | UnknownType
             -- | StringType
             deriving (Show, Eq)
 
@@ -24,6 +25,8 @@ instance Ord Type where
     compare BoolType BoolType = EQ
     compare IntType BoolType = LT
     compare BoolType IntType = GT
+    compare UnknownType _ = LT
+    compare _ UnknownType = GT
 
 data Value = IntValue Integer Type
            | BoolValue Bool Type
@@ -76,10 +79,11 @@ data OpComb = EqualTo
             deriving (Show, Eq)
 
 data Stmt = Seq Stmt Stmt
+          | Declaration String Expr Type
           | Assign String Expr
           | If Expr Stmt Stmt
           | While Expr Stmt
-          | Func String [String] Stmt
+          | Func String [(Type, String)] Stmt
           | ExprStmt Expr
           | Skip
           deriving (Show)
@@ -107,6 +111,8 @@ languageDef =
                                        , "not"
                                        , "and"
                                        , "or"
+                                       -- , "int"
+                                       -- , "bool"
                                        ]
              , Token.reservedOpNames = ["+", "-", "*", "/", "=", "=="
                                        , "<", ">", "and", "or", "not"
@@ -123,6 +129,7 @@ integer = Token.integer lexer
 stringLiteral = Token.stringLiteral lexer
 semi = Token.semi lexer
 whiteSpace = Token.whiteSpace lexer
+symbol = Token.symbol lexer
 
 parser :: Parser Stmt
 parser = whiteSpace >> statement
@@ -145,6 +152,7 @@ statement' :: Parser Stmt
 statement' =   ifStmt
            <|> whileStmt
            <|> skipStmt
+           <|> declarationStmt
            <|> assignStmt
            <|> funcStmt
            <|> exprStmt
@@ -180,6 +188,16 @@ whileStmt = do
     stmt <- statement
     reserved "end"
     return $ While cond stmt
+declarationStmt :: Parser Stmt
+declarationStmt =   do
+    -- dataType <- (symbol "int" <|> symbol "bool")
+    dataType <- identifier
+    var <- identifier
+    reservedOp "="
+    expr <- aExpression
+    case dataType of
+        "int" ->  return (Declaration var expr IntType)
+        "bool" -> return (Declaration var expr BoolType)
 assignStmt :: Parser Stmt
 assignStmt = do
     var <- identifier
@@ -192,7 +210,7 @@ funcStmt :: Parser Stmt
 funcStmt = do
     reserved "def"
     name <- identifier
-    args <- (sepBy identifier whiteSpace)
+    args <- (sepBy declaration whiteSpace)
     reserved "start"
     stmts <- statement
     reserved "end"
@@ -202,6 +220,14 @@ exprStmt :: Parser Stmt
 exprStmt = do
     expr <- aExpression
     return $ ExprStmt expr
+declaration :: Parser (Type, String)
+declaration = do
+    -- dataType <- (symbol "int" <|> symbol "bool")
+    dataType <- identifier
+    name <- identifier
+    case dataType of
+        "int" ->  return (IntType, name)
+        "bool" -> return (BoolType, name)
 
 
 -- Defining Value Parsers
@@ -224,10 +250,10 @@ aExpression =   buildExpressionParser aOperators aTerm
      -- <$>
 funcCallStmt :: Parser Expr
 funcCallStmt = do
-    reserved "call"
+    reservedOp "call"
     name <- identifier
     args <- sepBy aTerm whiteSpace
-    reserved "end"
+    reservedOp "end"
     return $ FuncCall name args
 -- bExpression :: Parser ExprBool
 -- bExpression = buildExpressionParser bOperators bTerm
