@@ -14,4 +14,4 @@ def fib N start
     end
 end
 
-output = call fib 25 end
+output = call fib num end

@@ -74,7 +74,7 @@ checkExpr expr env funcs = case expr of
     Val val ->              case val of
                                 IntValue i1 typ ->  (env, Set.singleton typ)
                                 BoolValue b1 typ -> (env, Set.singleton typ)
-    Negate expr' ->         checkExpr exp r' env funcs
+    Negate expr' ->         checkExpr expr' env funcs
     Comb op ex1 ex2 ->      let (env', typ1) = checkExpr ex1 env funcs
                                 (env'', typ2) = checkExpr ex2 env' funcs
                                 env''' = equalizeTermTypes op (ex1,typ1) (ex2,typ2) env'' funcs

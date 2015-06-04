@@ -12,5 +12,5 @@ def fib N start
         output = prevVal + prevPrevVal
     end
 end
-output = call fib 10 end
+output = call fib 20 end
 

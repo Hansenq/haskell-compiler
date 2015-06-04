@@ -6,6 +6,7 @@ import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Debug.Trace
 import Control.Monad.State.Strict
+import Criterion.Main
 -- Control.Monad.State.Lazy
 
 type Valuation = Map.Map String Value
@@ -90,7 +91,7 @@ evalExpr' expr = case expr of
         return $ valNegate val
     FuncCall name args -> do
         env@Env{..} <- get
-        let argValues = map (\arg -> undefined) args -- TODO: The lambda function in the map.
+        let argValues = map (\arg -> undefined) args -- TODO: The lambda function in the map.E
             (argNames, stmt, cache, (countCalc, countMem)) = store Map.! name
             resMaybe = Map.lookup argValues cache
         undefined
@@ -123,10 +124,10 @@ evalExpr expr env fEnv = case expr of
                                 val = Map.lookup argValues cache
                             in
                             -- Comment out the next four lines to disable Memoisation.
-                            --     case val of
-                            --     Just v ->   let fEnv'' = Map.insert name (argNames, stmt, cache, (countCalc, countMem + 1)) fEnv'
-                            --                 in  (v, fEnv'')
-                            --     Nothing ->
+                                case val of
+                                Just v ->   let fEnv'' = Map.insert name (argNames, stmt, cache, (countCalc, countMem + 1)) fEnv'
+                                            in  (v, fEnv'')
+                                Nothing ->
                                             let (val, tempEnv', fEnv'') = eval stmt (Map.fromList (zip argNames argValues)) fEnv'
                                                 -- Gets "output"; defaults to val
                                                 output = Maybe.fromMaybe val (Map.lookup "output" tempEnv')
@@ -184,8 +185,8 @@ evalFile file = do
     putStrLn "### Raw ASN: "
     print stmt
     putStrLn ""
-    let -- (val, env, fEnv) = eval stmt Map.empty Map.empty
-        (val, Env env fEnv True) = runState (eval' stmt) iEnv
+    let (val, env, fEnv) = eval stmt Map.empty Map.empty
+        -- (val, Env env fEnv True) = runState (eval' stmt) iEnv
     putStrLn $ "### Output is: "
     print (Maybe.fromMaybe val $ Map.lookup "output" env)
     putStrLn ""
@@ -194,3 +195,47 @@ evalFile file = do
     putStrLn $ calcStats memStats
     putStrLn ""
     return (val, env, fEnv)
+
+evalWrapper :: Stmt -> Valuation -> FuncStorage -> Integer -> (Value, Valuation, FuncStorage)
+evalWrapper stmt env fEnv num = eval stmt (Map.union (Map.singleton "num" (IntValue num IntType)) env) fEnv
+
+testWrapper :: String -> Integer -> IO (Value, FuncStorage)
+testWrapper file num = do
+    stmt <- parseFile file
+    let func = evalWrapper stmt Map.empty Map.empty
+        (val, env, fEnv) = func num
+    let memStats = getStats fEnv
+    -- putStrLn $ "### Output is: "
+    -- print (Maybe.fromMaybe val $ Map.lookup "output" env)
+    -- putStrLn ""
+    -- putStrLn $ "### Memoisation Stats (% of calls that are memoised): "
+    -- putStrLn $ calcStats memStats
+    -- putStrLn ""
+    let (IntValue x IntType) = val
+    putStrLn ((show num) ++ ":\t " ++ (show x))
+    return (val, fEnv)
+
+
+main = do
+    putStrLn $ "Benchmarking: "
+    stmt <- parseFile "fib1.hk"
+    let toBench = evalWrapper stmt Map.empty Map.empty
+    defaultMain [
+        bgroup "fib" [ bench "3" $ whnfIO ((testWrapper "fib1.hk") 3)
+                     , bench "4" $ whnfIO ((testWrapper "fib1.hk") 4)
+                     , bench "5" $ whnfIO ((testWrapper "fib1.hk") 5)
+                     , bench "7" $ whnfIO ((testWrapper "fib1.hk") 7)
+                     , bench "10" $ whnfIO ((testWrapper "fib1.hk") 10)
+                     , bench "12" $ whnfIO ((testWrapper "fib1.hk") 12)
+                     , bench "14" $ whnfIO ((testWrapper "fib1.hk") 14)
+                     , bench "16" $ whnfIO ((testWrapper "fib1.hk") 16)
+                     , bench "18" $ whnfIO ((testWrapper "fib1.hk") 18)
+                     , bench "20" $ whnfIO ((testWrapper "fib1.hk") 20)
+                     , bench "22" $ whnfIO ((testWrapper "fib1.hk") 22)
+                     , bench "24" $ whnfIO ((testWrapper "fib1.hk") 24)
+                     , bench "24" $ whnfIO ((testWrapper "fib1.hk") 26)
+                     , bench "24" $ whnfIO ((testWrapper "fib1.hk") 28)
+                     ]
+                ]
+
+
