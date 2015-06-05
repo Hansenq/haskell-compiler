@@ -14,5 +14,12 @@ end
 
 def boolean arg1 arg2 start
     arg3 = arg1 == arg2
+    arg4 = arg1 < arg1
     output = arg1
+end
+
+if true then
+    x = true
+else
+    x = 3
 end

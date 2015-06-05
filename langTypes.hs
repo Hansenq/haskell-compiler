@@ -39,7 +39,7 @@ toTree x =                              x
 
 analyzeTypesFunc :: Tree -> FuncInfo -> (String, ([String], PossTypes))
 analyzeTypesFunc (Func name args st) myFuncs =
-    (name, (args, analyzeTypes st (Map.fromList (zip args (repeat (Set.fromList [IntType, BoolType])))) myFuncs))
+    (name, (args, analyzeTypes st (Map.fromList (zip args (repeat (Set.fromList [])))) myFuncs))
 
 -- Takes a tree and a Map from variable name to a set of all possible
 -- types the variable can take.
@@ -59,9 +59,10 @@ mergeTypeMap :: PossTypes -> PossTypes -> PossTypes
 mergeTypeMap map1 map2 = Map.unionWith (\s1 s2 -> mergeTypeSet s1 s2) map1 map2
 
 mergeTypeSet :: Set.Set Type -> Set.Set Type -> Set.Set Type
-mergeTypeSet set1 set2 = case Set.null (Set.intersection set1 set2) of
-                                    False ->    Set.intersection set1 set2
-                                    True ->     error ((show set1) ++ " does not match " ++ (show set2))
+-- mergeTypeSet set1 set2 = case Set.null (Set.intersection set1 set2) of
+--                                     False ->    Set.intersection set1 set2
+--                                     True ->     error ((show set1) ++ " does not match " ++ (show set2))
+mergeTypeSet set1 set2 = Set.union set1 set2
 
 checkEqual :: Show a => Bool -> Bool -> [a] -> Bool
 checkEqual b1 b2 lst = case (b1 == b2) of
@@ -70,7 +71,7 @@ checkEqual b1 b2 lst = case (b1 == b2) of
 
 checkExpr :: Expr -> PossTypes -> FuncInfo -> (PossTypes, Set.Set Type)
 checkExpr expr env funcs = case expr of
-    Var str ->              (env, env Map.! str)
+    Var str ->              trace "HERE" (env, env Map.! str)
     Val val ->              case val of
                                 IntValue i1 typ ->  (env, Set.singleton typ)
                                 BoolValue b1 typ -> (env, Set.singleton typ)
@@ -91,10 +92,12 @@ checkExpr expr env funcs = case expr of
                                         varTypes = map (\arg -> snd $ checkExpr arg env funcs) args
                                         -- If any arguments do not fit the type, the error should be thrown here.
                                         mergedArgTypes = map (\(var, arg) -> mergeTypeSet var arg) (zip varTypes funcArgReqTypes)
+                                        env'' = foldl (\acc (name, set) -> Map.insert name set acc) env' (zip funcArgNames mergedArgTypes)
                                         -- TODO: Need this if statement here because otherwise (lazy) Haskell won't evaluate mergedArgTypes.
-                                        str = if (foldl (\acc x -> acc || Set.null x) False mergedArgTypes) == True then error "Arguments do not match declaration" else "output"
-                                        outputType = funcVarTypes Map.! str -- TODO: what if there is none
-                                    in  (env', outputType)
+                                        -- str = if (foldl (\acc x -> acc || Set.null x) False mergedArgTypes) == True then error "Arguments do not match declaration" else "output"
+                                        outputType = funcVarTypes Map.! "output" -- TODO: what if there is none
+                                    in  (env'', outputType)
+                                -- If we don't have information on this function yet, it can be either value.
                                 Nothing -> (env, Set.fromList [IntType, BoolType])
 
 -- Takes a Comb operation, for variables involved in the Comb, equalizes both sides so
@@ -102,29 +105,32 @@ checkExpr expr env funcs = case expr of
 equalizeTermTypes :: OpComb -> (Expr, Set.Set Type) -> (Expr, Set.Set Type) -> PossTypes -> FuncInfo -> PossTypes
 equalizeTermTypes op (ex1, typ1) (ex2, typ2) env funcs
     | op == EqualTo && (isVar ex1 || isVar ex2) =
-        let intersect = Set.intersection typ1 typ2
+        let union = Set.union typ1 typ2
             -- Hack
-            intersect2 = if Set.null intersect then error "Types in the expression don't match!" else intersect
+            -- union2 = if Set.null union then error "Types in the expression don't match!" else union
+            union2 = union
         in  case (ex1, ex2) of
-                (Var v1, Var v2) ->     Map.insert v1 intersect2 (Map.insert v2 intersect2 env)
-                (Var v1, _) ->          Map.insert v1 intersect2 env
-                (_, Var v2) ->          Map.insert v2 intersect2 env
+                (Var v1, Var v2) ->     Map.insert v1 union2 (Map.insert v2 union2 env)
+                (Var v1, _) ->          Map.insert v1 union2 env
+                (_, Var v2) ->          Map.insert v2 union2 env
     | op `elem` [GreaterThan, LessThan, Add, Sub, Mult, Div]
         && (isVar ex1 || isVar ex2) =
         let resType = Set.singleton IntType
-            intersect = if Set.null (Set.intersection typ1 typ2) then error "Types in the expression don't match!" else resType
+            -- union = if Set.null (Set.union typ1 typ2) then error "Types in the expression don't match!" else resType
+            union = resType
         in  case (ex1, ex2) of
-                (Var v1, Var v2) ->     Map.insert v1 intersect (Map.insert v2 intersect env)
-                (Var v1, _) ->          Map.insert v1 intersect env
-                (_, Var v2) ->          Map.insert v2 intersect env
+                (Var v1, Var v2) ->     Map.insert v1 union (Map.insert v2 union env)
+                (Var v1, _) ->          Map.insert v1 union env
+                (_, Var v2) ->          Map.insert v2 union env
     | op `elem` [And, Or]
         && (isVar ex1 || isVar ex2) =
         let resType = Set.singleton BoolType
-            intersect = if Set.null (Set.intersection typ1 typ2) then error "Types in the expression don't match!" else resType
+            -- union = if Set.null (Set.union typ1 typ2) then error "Types in the expression don't match!" else resType
+            union = resType
         in  case (ex1, ex2) of
-                (Var v1, Var v2) ->     Map.insert v1 intersect (Map.insert v2 intersect env)
-                (Var v1, _) ->          Map.insert v1 intersect env
-                (_, Var v2) ->          Map.insert v2 intersect env
+                (Var v1, Var v2) ->     Map.insert v1 union (Map.insert v2 union env)
+                (Var v1, _) ->          Map.insert v1 union env
+                (_, Var v2) ->          Map.insert v2 union env
     | otherwise = env
 
 isVar :: Expr -> Bool
@@ -133,18 +139,19 @@ isVar _ =       False
 
 valComb :: OpComb -> Set.Set Type -> Set.Set Type -> Set.Set Type
 valComb op s1 s2
-    | op == EqualTo && not (Set.null (Set.intersection s1 s2)) = Set.singleton BoolType
-    | op `elem` [GreaterThan, LessThan]
-        && Set.member IntType s1
-        && Set.member IntType s2 =
+    -- | op == EqualTo && not (Set.null (Set.intersection s1 s2)) = Set.singleton BoolType
+    | op == EqualTo = Set.singleton BoolType
+    | op `elem` [GreaterThan, LessThan] =
+        -- && Set.member IntType s1
+        -- && Set.member IntType s2 =
             Set.singleton BoolType
-    | op `elem` [And, Or]
-        && Set.member BoolType s1
-        && Set.member BoolType s2 =
+    | op `elem` [And, Or] =
+        -- && Set.member BoolType s1
+        -- && Set.member BoolType s2 =
             Set.singleton BoolType
-    | op `elem` [Add, Sub, Mult, Div]
-        && Set.member IntType s1
-        && Set.member IntType s2 =
+    | op `elem` [Add, Sub, Mult, Div] =
+        -- && Set.member IntType s1
+        -- && Set.member IntType s2 =
             Set.singleton IntType
     | otherwise = error ((show s1) ++ " does not match " ++ (show s2) ++ " for operation " ++ (show op))
 
@@ -155,6 +162,9 @@ showFuncSoftTypes lst = foldl   (\acc (name, (args, fMap)) ->
                                         ++ (foldl (\acc (k, set) -> acc ++ "\t" ++ k ++ ": " ++ (show set) ++ "\n") "" (Map.assocs fMap))
                                         )
                                 ) "" lst
+
+showGlobalSoftTypes :: PossTypes -> String
+showGlobalSoftTypes pt = "Global Variables:\n" ++ (foldl (\acc (k, set) -> acc ++ "\t" ++ k ++ ": " ++ (show set) ++ "\n") "" (Map.assocs pt))
 
 typeFile :: String -> IO (Bool, Types, FuncStorage)
 typeFile file = do
@@ -197,6 +207,11 @@ typeFile file = do
     putStrLn ""
     -- TODO: How many times do we have to repeat this until all types are accurate?
     -- Run until everything is fixed.
+
+    let globalTypes = analyzeTypes globalTree Map.empty Map.empty
+    putStrLn "### Global variables with possible types: "
+    putStrLn $ showGlobalSoftTypes globalTypes -- [(name, ([args], Map varName (Set Type))), ...]
+    putStrLn ""
 
     -- Analyze global statements down here (after we know everything about the functions)
     -- let (b, types, funcSt) = checkStmt stmt' Map.empty Map.empty
